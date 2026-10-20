@@ -9,14 +9,14 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Point 10.2 : chaque suiveur conserve les identifiants lus dans les messages.
- * La remontee des identifiants vers le pere sera ajoutee au point 10.3.
+ * Point 10.3 : les suiveurs renvoient au pere leurs identifiants collectes.
+ * Les echos permettent aussi de terminer sur un graphe comportant des cycles.
  */
 public class Echo extends Process {
     private static final int DIFFUSION = 1;
+    private static final int ECHO = 2;
     private static final String TEXTE = "Bonjour depuis le processus 0";
 
-    // Etat local du processus : il sera reutilise pour tous les futurs messages recus.
     private final Set<Integer> identifiantsMemorises = new HashSet<>();
 
     public Echo() throws IOException {
@@ -28,24 +28,71 @@ public class Echo extends Process {
 
     @Override
     public void run() throws Exception {
+        int pere = -1;
+        String texte = TEXTE;
+
         if (id == 0) {
-            Set<Integer> identifiants = new HashSet<>();
-            identifiants.add(id);
-            afficher(TEXTE);
-            diffuser(TEXTE, identifiants, -1);
+            identifiantsMemorises.add(id);
         } else {
+            // Le premier message de diffusion designe le pere.
+            InputMessage premier = receive();
+            if (premier.type != DIFFUSION) {
+                throw new IllegalStateException("Premier message inattendu : " + premier.type);
+            }
+            pere = premier.senderProcessId;
+            texte = lireDiffusion(premier);
+        }
+
+        afficher(texte);
+        if (id != 0) {
+            System.out.println("Processus " + id + " - identifiants memorises : " + identifiantsMemorises);
+        }
+
+        // Un echo est attendu de chaque voisin explore, sauf le pere.
+        Set<Integer> enAttente = new HashSet<>(outNeighbors);
+        enAttente.remove(pere);
+        diffuser(texte, identifiantsMemorises, pere);
+
+        while (!enAttente.isEmpty()) {
             InputMessage message = receive();
-            if (message.type != DIFFUSION) {
+            int expediteur = message.senderProcessId;
+
+            if (message.type == DIFFUSION) {
+                // Une autre branche nous a deja decouvert : on ne rediffuse pas.
+                lireDiffusion(message);
+                envoyerEcho(expediteur, Set.of());
+            } else if (message.type == ECHO) {
+                // Regrouper les identifiants remontes par ce voisin.
+                if (!enAttente.remove(expediteur)) {
+                    throw new IllegalStateException("ECHO inattendu de " + expediteur);
+                }
+                lireIdentifiants(message);
+            } else {
                 throw new IllegalStateException("Type de message inattendu : " + message.type);
             }
-            String texte = message.readString();
-            int taille = message.readInt();
-            for (int i = 0; i < taille; i++) {
-                identifiantsMemorises.add(message.readInt());
-            }
-            afficher(texte);
-            System.out.println("Processus " + id + " - identifiants memorises : " + identifiantsMemorises);
-            diffuser(texte, identifiantsMemorises, message.senderProcessId);
+        }
+
+        if (id == 0) {
+            System.out.println("Processus 0 : diffusion terminee (tous les echos recus)");
+        } else {
+            // Le suiveur ajoute son propre numero avant de remonter vers son pere.
+            identifiantsMemorises.add(id);
+            envoyerEcho(pere, identifiantsMemorises);
+            System.out.println("Processus " + id + " -> pere " + pere
+                    + " : " + identifiantsMemorises);
+        }
+    }
+
+    private String lireDiffusion(InputMessage message) throws IOException {
+        String texte = message.readString();
+        lireIdentifiants(message);
+        return texte;
+    }
+
+    private void lireIdentifiants(InputMessage message) throws IOException {
+        int taille = message.readInt();
+        for (int i = 0; i < taille; i++) {
+            identifiantsMemorises.add(message.readInt());
         }
     }
 
@@ -60,11 +107,21 @@ public class Echo extends Process {
             }
             OutputMessage message = new OutputMessage(DIFFUSION);
             message.writeString(texte);
-            message.writeInt(identifiants.size());
-            for (int identifiant : identifiants) {
-                message.writeInt(identifiant);
-            }
+            ecrireIdentifiants(message, identifiants);
             send(voisin, message);
+        }
+    }
+
+    private void envoyerEcho(int destinataire, Set<Integer> identifiants) throws IOException {
+        OutputMessage message = new OutputMessage(ECHO);
+        ecrireIdentifiants(message, identifiants);
+        send(destinataire, message);
+    }
+
+    private void ecrireIdentifiants(OutputMessage message, Set<Integer> identifiants) throws IOException {
+        message.writeInt(identifiants.size());
+        for (int identifiant : identifiants) {
+            message.writeInt(identifiant);
         }
     }
 }
