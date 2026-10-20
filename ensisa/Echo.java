@@ -9,8 +9,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Point 10.3 : les suiveurs renvoient au pere leurs identifiants collectes.
- * Les echos permettent aussi de terminer sur un graphe comportant des cycles.
+ * Points 10.3 et 10.4 : les suiveurs renvoient les identifiants au pere,
+ * et l'initiateur affiche chaque ensemble recu et leur union.
  */
 public class Echo extends Process {
     private static final int DIFFUSION = 1;
@@ -66,13 +66,19 @@ public class Echo extends Process {
                 if (!enAttente.remove(expediteur)) {
                     throw new IllegalStateException("ECHO inattendu de " + expediteur);
                 }
-                lireIdentifiants(message);
+                Set<Integer> recus = lireIdentifiants(message);
+                if (id == 0) {
+                    System.out.println("Processus 0 <- processus " + expediteur
+                            + " - identifiants recus : " + new java.util.TreeSet<>(recus));
+                }
             } else {
                 throw new IllegalStateException("Type de message inattendu : " + message.type);
             }
         }
 
         if (id == 0) {
+            System.out.println("Processus 0 - identifiants collectes : "
+                    + new java.util.TreeSet<>(identifiantsMemorises));
             System.out.println("Processus 0 : diffusion terminee (tous les echos recus)");
         } else {
             // Le suiveur ajoute son propre numero avant de remonter vers son pere.
@@ -89,11 +95,14 @@ public class Echo extends Process {
         return texte;
     }
 
-    private void lireIdentifiants(InputMessage message) throws IOException {
+    private Set<Integer> lireIdentifiants(InputMessage message) throws IOException {
+        Set<Integer> recus = new HashSet<>();
         int taille = message.readInt();
         for (int i = 0; i < taille; i++) {
-            identifiantsMemorises.add(message.readInt());
+            recus.add(message.readInt());
         }
+        identifiantsMemorises.addAll(recus);
+        return recus;
     }
 
     private void afficher(String texte) {
