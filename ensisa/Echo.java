@@ -9,12 +9,15 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Point 10.1 : les messages transportent le texte et un ensemble d'identifiants.
- * La collecte des identifiants et les messages d'echo seront ajoutes ensuite.
+ * Point 10.2 : chaque suiveur conserve les identifiants lus dans les messages.
+ * La remontee des identifiants vers le pere sera ajoutee au point 10.3.
  */
 public class Echo extends Process {
     private static final int DIFFUSION = 1;
     private static final String TEXTE = "Bonjour depuis le processus 0";
+
+    // Etat local du processus : il sera reutilise pour tous les futurs messages recus.
+    private final Set<Integer> identifiantsMemorises = new HashSet<>();
 
     public Echo() throws IOException {
     }
@@ -37,12 +40,12 @@ public class Echo extends Process {
             }
             String texte = message.readString();
             int taille = message.readInt();
-            Set<Integer> identifiants = new HashSet<>();
             for (int i = 0; i < taille; i++) {
-                identifiants.add(message.readInt());
+                identifiantsMemorises.add(message.readInt());
             }
             afficher(texte);
-            diffuser(texte, identifiants, message.senderProcessId);
+            System.out.println("Processus " + id + " - identifiants memorises : " + identifiantsMemorises);
+            diffuser(texte, identifiantsMemorises, message.senderProcessId);
         }
     }
 
